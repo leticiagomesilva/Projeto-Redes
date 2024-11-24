@@ -1,26 +1,42 @@
-import socket 
+import socket
+import hashlib
+import time
+import threading
 
-HEADER = 64
-PORT = 5050
-FORMAT = 'utf-8'
-DISCONNECT_MESSAGE = "!DISCONNECT"
-SERVER = socket.gethostbyname(socket.gethostname())
-ADDR = (SERVER, PORT)
+def checksum(data):
+    return sum(ord(c) for c in data) & 0xFFFF
 
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect(ADDR)
+class Cliente:
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.connect((self.host, self.port))
 
-def send(msg):
-    message = msg.encode(FORMAT)
-    msg_length = len(message)
-    send_length = str(msg_length).encode(FORMAT)
-    send_length += b' ' * (HEADER - len(send_length))
-    client.send (send_length)
-    client.send(message)
-    print(client.recv(2048).decode(FORMAT))
+    def send_with_ack(self, data):
+        chk = checksum(data)
+        message = f"{data}:{chk}"
+        self.socket.sendall(message.encode('utf-8'))
+        print(f"Enviado: {message}")
+        self.await_ack()
 
-send(input())
-send(input())
-send(input())
+    def await_ack(self):
+        while True:
+            response = self.socket.recv(1024).decode('utf-8')
+            if response == "ACK":
+                print("ACK recebido")
+                break
+            elif response == "NAK":
+                print("NAK recebido, reenviando dados")
+                self.send_with_ack(data)
 
-send(DISCONNECT_MESSAGE)
+    def close(self):
+        self.socket.sendall("DISCONNECT".encode('utf-8'))
+        self.socket.close()
+        print("Conexão encerrada.")
+
+
+# Utilização
+cliente = Cliente('127.0.0.1', 12345)
+cliente.send_with_ack("Olá, servidor!")
+cliente.close()
